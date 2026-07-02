@@ -1,0 +1,488 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Swordman Battle</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: #0f0f1a;
+    color: #eee;
+    font-family: 'Courier New', monospace;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 16px;
+    user-select: none;
+  }
+
+  h1 { color: #f0a500; font-size: 1.8rem; letter-spacing: 4px; margin-bottom: 4px; }
+  .subtitle { color: #666; font-size: 0.75rem; margin-bottom: 16px; }
+
+  /* ── HUD ── */
+  #hud {
+    display: flex; gap: 24px; align-items: center;
+    background: #16213e; border-radius: 10px; padding: 10px 20px;
+    margin-bottom: 16px; font-size: 0.9rem;
+  }
+  .hud-item { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+  .hud-label { font-size: 0.6rem; color: #888; text-transform: uppercase; letter-spacing: 1px; }
+  .hud-val { font-size: 1.1rem; font-weight: bold; }
+  .gold { color: #f0a500; }
+  .wave-num { color: #4a90d9; }
+  .status-text { color: #aaa; font-size: 0.85rem; }
+
+  /* ── ARENA ── */
+  #arena-wrap {
+    width: 100%; max-width: 700px;
+    background: #16213e; border-radius: 12px;
+    padding: 16px; margin-bottom: 16px;
+  }
+  #arena {
+    display: flex; align-items: flex-end; justify-content: space-between;
+    height: 120px; position: relative;
+    background: linear-gradient(to bottom, #0a0a1a 0%, #1a1a3a 60%, #2a2a1a 100%);
+    border-radius: 8px; padding: 0 16px; overflow: hidden;
+    border: 1px solid #2a2a4a;
+  }
+  .arena-side {
+    display: flex; align-items: flex-end; gap: 6px; height: 100%; padding: 8px 0;
+    flex: 1;
+  }
+  #player-side { justify-content: flex-start; }
+  #enemy-side  { justify-content: flex-end; }
+
+  .fighter {
+    display: flex; flex-direction: column; align-items: center;
+    transition: transform 0.1s;
+    position: relative;
+  }
+  .fighter .emoji { font-size: 2rem; line-height: 1; }
+  .fighter .lvl   { font-size: 0.5rem; color: #f0a500; font-weight: bold; position: absolute; top: -2px; right: -4px; background: #1a1a2e; border-radius: 3px; padding: 0 2px; }
+  .fighter .bar-wrap { width: 32px; height: 4px; background: #333; border-radius: 2px; margin-top: 2px; }
+  .fighter .bar { height: 100%; border-radius: 2px; background: #44ff88; transition: width 0.3s; }
+  .fighter .bar.low { background: #ff4444; }
+  .fighter.dead  { opacity: 0; transform: scale(0); transition: opacity 0.6s, transform 0.6s; }
+  .fighter.clash { animation: clash 0.5s ease-in-out; }
+  @keyframes clash {
+    0%   { transform: translateX(0); }
+    30%  { transform: translateX(22px); }
+    50%  { transform: translateX(12px); }
+    70%  { transform: translateX(18px); }
+    100% { transform: translateX(0); }
+  }
+  #enemy-side .fighter.clash {
+    animation: clash-r 0.5s ease-in-out;
+  }
+  @keyframes clash-r {
+    0%   { transform: translateX(0); }
+    30%  { transform: translateX(-22px); }
+    50%  { transform: translateX(-12px); }
+    70%  { transform: translateX(-18px); }
+    100% { transform: translateX(0); }
+  }
+  #arena.flash-win  { animation: flash-win  0.5s; }
+  #arena.flash-lose { animation: flash-lose 0.5s; }
+  @keyframes flash-win  { 0%,100%{background:inherit} 50%{background:#1a3a1a;} }
+  @keyframes flash-lose { 0%,100%{background:inherit} 50%{background:#3a1a1a;} }
+
+  .vs-divider {
+    color: #444; font-size: 1.5rem; flex-shrink: 0; align-self: center;
+  }
+
+  /* ── SHOP / MERGE AREA ── */
+  #bottom { display: flex; gap: 16px; width: 100%; max-width: 700px; flex-wrap: wrap; }
+
+  #bench-wrap, #shop-wrap {
+    background: #16213e; border-radius: 12px; padding: 14px; flex: 1; min-width: 200px;
+  }
+  .section-title {
+    font-size: 0.65rem; color: #888; text-transform: uppercase;
+    letter-spacing: 2px; margin-bottom: 10px;
+  }
+
+  /* bench grid */
+  #bench {
+    display: grid; grid-template-columns: repeat(6, 48px); gap: 6px;
+  }
+  .bench-slot {
+    width: 48px; height: 56px; border-radius: 6px;
+    background: #0d0d1a; border: 2px dashed #2a2a4a;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    cursor: pointer; transition: border-color 0.15s, transform 0.1s;
+    position: relative; font-size: 1.4rem;
+  }
+  .bench-slot:empty-slot { cursor: default; }
+  .bench-slot.has-unit { border-color: #4a90d9; background: #162447; }
+  .bench-slot.has-unit:hover { border-color: #f0a500; transform: scale(1.05); }
+  .bench-slot.selected { border-color: #f0a500 !important; background: #2a1a00 !important; }
+  .bench-slot.merge-target { border-color: #44ff88 !important; animation: pulse 0.6s infinite alternate; }
+  .bench-slot .slot-lvl { font-size: 0.5rem; color: #f0a500; font-weight: bold; position: absolute; top: 2px; right: 4px; }
+  @keyframes pulse { from{box-shadow:0 0 0} to{box-shadow:0 0 8px currentColor} }
+
+  /* shop buttons */
+  #shop-wrap { display: flex; flex-direction: column; }
+  .buy-btn {
+    background: #162447; border: 2px solid #4a90d9; border-radius: 8px;
+    color: #eee; font-family: inherit; font-size: 0.85rem;
+    padding: 10px 14px; cursor: pointer; text-align: left;
+    display: flex; justify-content: space-between; align-items: center;
+    transition: background 0.15s, border-color 0.15s; margin-bottom: 8px;
+  }
+  .buy-btn:hover:not(:disabled) { background: #1e3060; border-color: #6ab0ff; }
+  .buy-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .buy-btn .price { color: #f0a500; font-weight: bold; }
+
+  #wave-btn {
+    width: 100%; padding: 12px; border-radius: 8px; border: none;
+    background: linear-gradient(135deg, #d94a4a, #a02020);
+    color: #fff; font-family: inherit; font-size: 1rem;
+    font-weight: bold; cursor: pointer; margin-top: 8px;
+    letter-spacing: 2px; transition: opacity 0.15s;
+  }
+  #wave-btn:hover:not(:disabled) { opacity: 0.85; }
+  #wave-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  /* ── LOG ── */
+  #log-wrap {
+    width: 100%; max-width: 700px;
+    background: #16213e; border-radius: 12px; padding: 12px; margin-top: 12px;
+  }
+  #log { height: 100px; overflow-y: auto; font-size: 0.7rem; line-height: 1.7; }
+  #log .e { border-bottom: 1px solid #1a1a2e; padding: 1px 0; }
+  #log .e.good { color: #6bff9e; }
+  #log .e.bad  { color: #ff6b6b; }
+  #log .e.info { color: #aaa; }
+  #log .e.gold { color: #f0a500; }
+
+  /* ── OVERLAY ── */
+  #overlay {
+    display: none; position: fixed; inset: 0;
+    background: rgba(0,0,0,0.8); z-index: 10;
+    flex-direction: column; align-items: center; justify-content: center; gap: 16px;
+  }
+  #overlay.show { display: flex; }
+  #overlay h2 { font-size: 2.5rem; }
+  #overlay p  { color: #aaa; font-size: 1rem; }
+  #overlay button {
+    padding: 12px 32px; border-radius: 8px; border: none;
+    background: #f0a500; color: #1a1a2e; font-family: inherit;
+    font-size: 1rem; font-weight: bold; cursor: pointer;
+  }
+</style>
+</head>
+<body>
+
+<h1>⚔️ SWORDMAN BATTLE</h1>
+<p class="subtitle">merge · battle · conquer</p>
+
+<div id="hud">
+  <div class="hud-item">
+    <span class="hud-label">Gold</span>
+    <span class="hud-val gold" id="gold-disp">💰 50</span>
+  </div>
+  <div class="hud-item">
+    <span class="hud-label">Wave</span>
+    <span class="hud-val wave-num" id="wave-disp">1</span>
+  </div>
+  <div class="hud-item">
+    <span class="hud-label">Wins</span>
+    <span class="hud-val" id="wins-disp" style="color:#44ff88">0</span>
+  </div>
+  <div class="hud-item">
+    <span class="hud-label">Bench</span>
+    <span class="hud-val" id="bench-count-disp" style="color:#aaa">0/6</span>
+  </div>
+</div>
+
+<div id="arena-wrap">
+  <div id="arena">
+    <div class="arena-side" id="player-side"></div>
+    <div class="vs-divider">⚔️</div>
+    <div class="arena-side" id="enemy-side"></div>
+  </div>
+</div>
+
+<div id="bottom">
+  <div id="bench-wrap">
+    <div class="section-title">Your Swordmen — click two of the same level to merge</div>
+    <div id="bench"></div>
+  </div>
+  <div id="shop-wrap">
+    <div class="section-title">Shop</div>
+    <div id="shop-btns"></div>
+    <button id="wave-btn" onclick="startWave()">▶ SEND WAVE</button>
+  </div>
+</div>
+
+<div id="log-wrap">
+  <div class="section-title">Battle Log</div>
+  <div id="log"></div>
+</div>
+
+<div id="overlay">
+  <h2 id="overlay-title"></h2>
+  <p id="overlay-msg"></p>
+  <button onclick="closeOverlay()">Continue</button>
+</div>
+
+<script>
+// ── Unit definitions ───────────────────────────────────────────────────────
+const UNIT_TYPES = {
+  sword:  { emoji: '🗡️', name: 'Swordman', cost: 20, hp: 30,  atk: 10, atkCount: 1 },
+  archer: { emoji: '🏹', name: 'Archer',   cost: 25, hp: 18,  atk: 8,  atkCount: 2 },
+  knight: { emoji: '🛡️', name: 'Knight',   cost: 30, hp: 60,  atk: 6,  atkCount: 1 },
+  mage:   { emoji: '🔮', name: 'Mage',     cost: 35, hp: 15,  atk: 20, atkCount: 1 },
+};
+const ENEMY_TYPES = ['sword', 'archer', 'knight', 'mage'];
+
+// ── State ──────────────────────────────────────────────────────────────────
+const BENCH_SIZE  = 12;
+const BASE_REWARD = 30;
+
+let gold = 50, wave = 1, wins = 0;
+let bench = [];
+let fighting = false, selectedSlot = null;
+
+// ── Init ───────────────────────────────────────────────────────────────────
+function init() {
+  bench = new Array(BENCH_SIZE).fill(null);
+  renderShop();
+  renderBench();
+  updateHud();
+  log('Welcome! Buy units, merge same-type same-level pairs, then send the wave.', 'info');
+  log('🗡️ balanced  🏹 double-attack  🛡️ tank  🔮 glass cannon', 'info');
+}
+
+// ── HUD ────────────────────────────────────────────────────────────────────
+function updateHud() {
+  document.getElementById('gold-disp').textContent = `💰 ${gold}`;
+  document.getElementById('wave-disp').textContent = wave;
+  document.getElementById('wins-disp').textContent = wins;
+  const count = bench.filter(s => s !== null).length;
+  document.getElementById('bench-count-disp').textContent = `${count}/${BENCH_SIZE}`;
+  document.getElementById('wave-btn').disabled = count === 0 || fighting;
+  // re-render shop so buttons enable/disable correctly
+  renderShop();
+}
+
+// ── Shop ───────────────────────────────────────────────────────────────────
+function renderShop() {
+  const wrap = document.getElementById('shop-btns');
+  if (!wrap) return;
+  wrap.innerHTML = '';
+  const full = bench.filter(s => s !== null).length >= BENCH_SIZE;
+  for (const [key, def] of Object.entries(UNIT_TYPES)) {
+    const btn = document.createElement('button');
+    btn.className = 'buy-btn';
+    btn.disabled  = gold < def.cost || full || fighting;
+    btn.innerHTML = `<span>${def.emoji} ${def.name} Lv1</span><span class="price">💰 ${def.cost}</span>`;
+    btn.onclick   = () => buyUnit(key);
+    wrap.appendChild(btn);
+  }
+}
+
+function buyUnit(type) {
+  const def = UNIT_TYPES[type];
+  if (!def || gold < def.cost) return;
+  const empty = bench.indexOf(null);
+  if (empty === -1) return;
+  gold -= def.cost;
+  bench[empty] = { type, level: 1 };
+  selectedSlot = null;
+  log(`Bought ${def.emoji} ${def.name} Lv1 for 💰${def.cost}.`, 'info');
+  renderBench();
+}
+
+// ── Bench ──────────────────────────────────────────────────────────────────
+function renderBench() {
+  const el = document.getElementById('bench');
+  el.innerHTML = '';
+  for (let i = 0; i < BENCH_SIZE; i++) {
+    const slot = document.createElement('div');
+    slot.className = 'bench-slot';
+    if (bench[i]) {
+      const { type, level } = bench[i];
+      const def = UNIT_TYPES[type];
+      slot.classList.add('has-unit');
+      if (i === selectedSlot) slot.classList.add('selected');
+      const sel = bench[selectedSlot];
+      if (selectedSlot !== null && selectedSlot !== i && sel &&
+          sel.type === type && sel.level === level)
+        slot.classList.add('merge-target');
+      slot.innerHTML = `${def.emoji}<span class="slot-lvl">Lv${level}</span>`;
+      slot.onclick = () => selectSlot(i);
+    }
+    el.appendChild(slot);
+  }
+  updateHud();
+}
+
+function selectSlot(i) {
+  if (fighting || !bench[i]) return;
+  if (selectedSlot === null)  { selectedSlot = i; renderBench(); return; }
+  if (selectedSlot === i)     { selectedSlot = null; renderBench(); return; }
+
+  const a = bench[selectedSlot], b = bench[i];
+  if (a.type === b.type && a.level === b.level) {
+    const newLevel = a.level + 1;
+    bench[i] = { type: a.type, level: newLevel };
+    bench[selectedSlot] = null;
+    selectedSlot = null;
+    log(`✨ Merged → ${UNIT_TYPES[a.type].emoji} ${UNIT_TYPES[a.type].name} Lv${newLevel}!`, 'good');
+  } else {
+    log('Can only merge two units of the same type and level.', 'info');
+    selectedSlot = i;
+  }
+  renderBench();
+}
+
+// ── Wave / Battle ──────────────────────────────────────────────────────────
+function buildEnemyArmy() {
+  const count    = Math.min(1 + Math.floor(wave / 2), 4);
+  const avgLevel = Math.max(1, Math.floor(wave * 0.6));
+  return Array.from({ length: count }, () => ({
+    type:  ENEMY_TYPES[Math.floor(Math.random() * ENEMY_TYPES.length)],
+    level: Math.max(1, avgLevel + Math.floor(Math.random() * 2) - 1),
+  }));
+}
+
+function makeFighter(u, id) {
+  const def = UNIT_TYPES[u.type];
+  return {
+    ...u,
+    id,
+    hp:       def.hp  * u.level,
+    maxHp:    def.hp  * u.level,
+    atk:      def.atk * u.level,
+    atkCount: def.atkCount,
+  };
+}
+
+function simulateBattle(pFighters, eFighters) {
+  let tick = 0;
+  while (pFighters.some(f => f.hp > 0) && eFighters.some(f => f.hp > 0)) {
+    if (++tick > 500) break;
+    for (const p of pFighters.filter(f => f.hp > 0)) {
+      for (let a = 0; a < p.atkCount; a++) {
+        const targets = eFighters.filter(f => f.hp > 0);
+        if (!targets.length) break;
+        const t = targets[Math.floor(Math.random() * targets.length)];
+        t.hp = Math.max(0, t.hp - p.atk);
+      }
+    }
+    for (const e of eFighters.filter(f => f.hp > 0)) {
+      for (let a = 0; a < e.atkCount; a++) {
+        const targets = pFighters.filter(f => f.hp > 0);
+        if (!targets.length) break;
+        const t = targets[Math.floor(Math.random() * targets.length)];
+        t.hp = Math.max(0, t.hp - e.atk);
+      }
+    }
+  }
+}
+
+async function startWave() {
+  if (fighting) return;
+  const playerUnits = bench.filter(s => s !== null);
+  if (!playerUnits.length) return;
+
+  fighting = true;
+  selectedSlot = null;
+  updateHud();
+
+  const enemies = buildEnemyArmy();
+  log(`── Wave ${wave} ──`, 'info');
+  log(`Enemy army: ${enemies.map(e => `${UNIT_TYPES[e.type].emoji}Lv${e.level}`).join('  ')}`, 'bad');
+
+  const pFighters = playerUnits.map((u, i) => makeFighter(u, `p${i}`));
+  const eFighters = enemies.map((u, i)      => makeFighter(u, `e${i}`));
+
+  // Show armies facing off
+  renderArena(pFighters, eFighters);
+  await sleep(400);
+
+  // Clash animation
+  document.querySelectorAll('#player-side .fighter').forEach(el => el.classList.add('clash'));
+  document.querySelectorAll('#enemy-side .fighter').forEach(el => el.classList.add('clash'));
+  await sleep(150);
+
+  // Simulate the full fight instantly
+  simulateBattle(pFighters, eFighters);
+  await sleep(400);
+
+  // Show result state (dead units fade out)
+  renderArena(pFighters, eFighters);
+
+  const playerWon = eFighters.every(f => f.hp <= 0);
+  const arena = document.getElementById('arena');
+  arena.classList.add(playerWon ? 'flash-win' : 'flash-lose');
+  await sleep(600);
+  arena.classList.remove('flash-win', 'flash-lose');
+  clearArena();
+
+  if (playerWon) {
+    bench = new Array(BENCH_SIZE).fill(null);
+    pFighters.filter(f => f.hp > 0).forEach((f, i) => bench[i] = { type: f.type, level: f.level });
+    const reward = BASE_REWARD + (wave - 1) * 10;
+    gold += reward; wins++; wave++;
+    log(`Victory! Earned 💰${reward}. Wave ${wave} incoming...`, 'good');
+    renderBench();
+    showOverlay('⚔️ VICTORY!', `+💰${reward} gold — prepare for Wave ${wave}!`);
+  } else {
+    log(`Defeated on Wave ${wave}. Game over!`, 'bad');
+    showOverlay('💀 DEFEATED', `You survived ${wins} wave(s). Refresh to play again.`);
+    document.getElementById('wave-btn').disabled = true;
+  }
+
+  fighting = false;
+  updateHud();
+}
+
+// ── Arena ──────────────────────────────────────────────────────────────────
+function renderArena(pList, eList) {
+  const ps = document.getElementById('player-side');
+  const es = document.getElementById('enemy-side');
+  ps.innerHTML = ''; es.innerHTML = '';
+  const make = f => {
+    const d = document.createElement('div');
+    d.className = 'fighter'; d.id = `fighter-${f.id}`;
+    const pct = Math.round((f.hp / f.maxHp) * 100);
+    if (f.hp <= 0) d.classList.add('dead');
+    d.innerHTML = `<span class="emoji">${UNIT_TYPES[f.type].emoji}</span><span class="lvl">Lv${f.level}</span><div class="bar-wrap"><div class="bar ${pct < 35 ? 'low' : ''}" style="width:${pct}%"></div></div>`;
+    return d;
+  };
+  pList.forEach(f => ps.appendChild(make(f)));
+  eList.forEach(f => es.appendChild(make(f)));
+}
+
+function clearArena() {
+  document.getElementById('player-side').innerHTML = '';
+  document.getElementById('enemy-side').innerHTML = '';
+}
+
+// ── Overlay ────────────────────────────────────────────────────────────────
+function showOverlay(title, msg) {
+  document.getElementById('overlay-title').textContent = title;
+  document.getElementById('overlay-msg').textContent   = msg;
+  document.getElementById('overlay').classList.add('show');
+}
+function closeOverlay() { document.getElementById('overlay').classList.remove('show'); }
+
+// ── Log ────────────────────────────────────────────────────────────────────
+function log(msg, cls = 'info') {
+  const el = document.getElementById('log');
+  const e  = document.createElement('div');
+  e.className = `e ${cls}`; e.textContent = msg;
+  el.appendChild(e); el.scrollTop = el.scrollHeight;
+}
+
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+init();
+</script>
+</body>
+</html>
